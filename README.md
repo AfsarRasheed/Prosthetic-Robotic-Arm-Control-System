@@ -37,7 +37,7 @@ A multimodal prosthetic robotic arm that mimics human hand movement using **comp
 
 ### 📦 Python Libraries
 
-Install all required libraries with:
+Install these in PyCharm via terminal or project interpreter:
 
 pip install opencv-python cvzone pyserial sounddevice vosk
 
@@ -48,9 +48,13 @@ pip install opencv-python cvzone pyserial sounddevice vosk
 
 prosthetic-robotic-arm/
 ├── main.py # Simple hand-control version
+
 ├── main2.py # Full multimode GUI version (recommended)
+
 ├── prosthetic_arm_control.ino # Arduino code
+
 ├── vosk-model-small-en-us-0.15/ # Offline speech model directory
+
 └── README.md
 
 
@@ -115,16 +119,35 @@ recieveData();
 
 
 ---
+## 🐍 Python GUI Overview
 
-## 🐍 Python Control Code (`main2.py`)
+Project contains **two Python files**:
 
-This file launches a GUI with 3 tabs:
+### `main.py` – Hand Gesture Control (basic)  
+- Detects fingers using `cvzone`  
+- Sends inverted binary (open/closed) finger states to Arduino  
+- Format: `$10101`
 
-- `Hand Detection` — Webcam-based control  
-- `Voice Recognition` — Offline command with Vosk  
-- `Rock Paper Scissors` — Fun mode using voice to play hand shapes  
+---
+### `main2.py` – Full GUI (all 3 modes)
 
-Each mode runs on a separate thread and communicates with Arduino over Serial using 5-digit binary strings like `$10101`.
+#### 🧭 Modes:
+
+1. **Hand Detection Mode**  
+   - Webcam detects fingers and sends data via Serial.
+
+2. **Offline Voice Mode**  
+   - VOSK listens for: one, two, three, four, five  
+   - Maps each to pre-defined finger bit patterns
+
+3. **Rock-Paper-Scissors Mode (RPS)**  
+   - Voice detects: “rock”, “paper”, “scissors”  
+   - Maps to:
+     - Rock → `[1,1,1,1,1]`
+     - Paper → `[0,0,0,0,0]`
+     - Scissors → `[1,0,0,1,1]`
+
+---
 
 ### ✅ Run the Program
 
@@ -202,6 +225,9 @@ Feel free to fork, contribute, or use this for your own developments in assistiv
 
 Pull requests, feedback, and ideas are always welcome!  
 If you build upon this project or adapt it for a different purpose, feel free to share your version and tag me.
+
+
+🎯 *Built with PyCharm, powered by OpenCV, Vosk & Arduino.*
 
 
 
