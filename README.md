@@ -1,19 +1,18 @@
 # 🦾 Smart Prosthetic Robotic Arm
 
-A multimodal prosthetic robotic arm that mimics human hand movement using **computer vision**, **offline voice recognition**, and **Arduino-controlled servo motors**. This system supports **gesture-based**, **voice-based**, and **game-based (rock-paper-scissors)** control—making it intuitive, offline-capable, and modular.
-
+A multimodal prosthetic hand that mimics human finger movement via **computer vision**, **offline voice control** (Vosk), and **Arduino-based servo motors**. The system is modular, offline-capable, and intuitive—with gesture, speech, and game-based (rock-paper-scissors) operation, all integrated with a Python GUI (developed in PyCharm).
 
 
 ---
 
 ## 🚀 Features
 
-- ✋ **Hand Detection Mode**: Detects finger positions using webcam + CVZone
-- 🗣️ **Offline Voice Control Mode**: Responds to speech input via Vosk (offline)
-- 🎮 **Rock-Paper-Scissors Mode**: Uses voice to play RPS gestures
-- 🖥️ GUI built with `tkinter` to switch between modes
-- 🔌 Reliable auto-reconnect serial communication with Arduino Uno
-- 🦿 Controls 3D-printed robotic fingers using 5 servo motors
+- **Hand Detection:** Live finger tracking using webcam & CVZone
+- **Voice Mode (Offline):** Accepts speech commands via Vosk for private, no-internet control
+- **Rock-Paper-Scissors Mode:** Play RPS with your prosthetic using voice
+- **Tkinter GUI:** Easy mode-switching and visualization
+- **Robust Serial Control:** Stable auto-reconnect to Arduino Uno
+- **5 DOF Actuation:** 5 servo motors, one per finger, for true dexterity
 
 ---
 
@@ -21,23 +20,24 @@ A multimodal prosthetic robotic arm that mimics human hand movement using **comp
 
 - Arduino Uno + Sensor Shield  
 - 5× MG996R Servo motors  
-- 3D Printed Prosthetic Arm  
+- 3D Printed Prosthetic Hand  
 - USB Webcam  
 - Microphone  
-- 5V external power supply (for servos)
+- 5V external supply (for servos)
 
 ---
 
 ## 🧪 Software Requirements
 
-- Python 3.7 or higher  
-- Arduino IDE  
-- Webcam & Microphone  
-- Windows or Linux  
+- Python 3.7+
+- Arduino IDE
+- PyCharm IDE (project developed in PyCharm)
+- Windows or Linux
+- Webcam & Microphone
 
-### 📦 Python Libraries
+#### 📦 Python Libraries
 
-Install these in PyCharm via terminal or project interpreter:
+Install in the terminal (PyCharm or command prompt):
 
 pip install opencv-python cvzone pyserial sounddevice vosk
 
@@ -47,187 +47,147 @@ pip install opencv-python cvzone pyserial sounddevice vosk
 ## 📁 Directory Structure
 
 prosthetic-robotic-arm/
-├── main.py # Simple hand-control version
 
-├── main2.py # Full multimode GUI version (recommended)
+├── main.py # Hand gesture (basic version, see below)
+
+├── main2.py # Full GUI (all modes, recommended)
 
 ├── prosthetic_arm_control.ino # Arduino code
 
-├── vosk-model-small-en-us-0.15/ # Offline speech model directory
+├── vosk-model-small-en-us-0.15/ # Vosk offline speech model
 
 └── README.md
 
 
-> 🎙 Download Vosk English model from: [https://alphacephei.com/vosk/models](https://alphacephei.com/vosk/models)  
-> Suggested model: `vosk-model-small-en-us-0.15`
+> 🎙 Download Vosk English model: [alphacephei.com/vosk/models](https://alphacephei.com/vosk/models)  
+> Recommended: `vosk-model-small-en-us-0.15`
 
 ---
 
-## 🔧 Arduino Code (`prosthetic_arm_control.ino`)
+## 🔧 Arduino Code (`ROBOTICARM.ino`)
 
-#define numOfValsRec 5
-#define digitsPerValRec 1
 
-#include <Servo.h>
-
-Servo servoThumb, servoIndex, servoMiddle, servoRing, servoPinky;
-int valsRec[numOfValsRec] = {0, 0, 0, 0, 0};
-String recievedString = "";
-bool receiving = false;
-
-void setup() {
-Serial.begin(9600);
-servoThumb.attach(9);
-servoIndex.attach(10);
-servoMiddle.attach(13);
-servoRing.attach(3);
-servoPinky.attach(11);
-updateServos();
-}
-
-void recieveData() {
-while (Serial.available()) {
-char c = Serial.read();
-if (c == '$') {
-recievedString = "";
-receiving = true;
-} else if (receiving) {
-recievedString += c;
-if (recievedString.length() >= numOfValsRec * digitsPerValRec) {
-receiving = false;
-for (int i = 0; i < numOfValsRec; i++) {
-int pos = i * digitsPerValRec;
-valsRec[i] = recievedString.substring(pos, pos + digitsPerValRec).toInt();
-}
-updateServos();
-}
-}
-}
-}
-
-void updateServos() {
-servoThumb.write(valsRec == 1 ? 0 : 180);
-servoIndex.write(valsRec == 1 ? 0 : 180);
-servoMiddle.write(valsRec == 1 ? 0 : 180);
-servoRing.write(valsRec == 1 ? 0 : 180);
-servoPinky.write(valsRec == 1 ? 0 : 180);
-}
-
-void loop() {
-recieveData();
-}
-
+**Explanation:**  
+- **Data reception:** Waits for a serial message that starts with `$` and has five digits (each for one finger).
+- **Parsing:** Each digit is converted to an integer (1 = closed, 0 = open).
+- **Actuation:** Corresponding servo is set to `0°` (closed) for `1`, `180°` (open) for `0`.
 
 ---
-## 🐍 Python GUI Overview
 
-Project contains **two Python files**:
+## 🐍 Python Hand Gesture Module (`main.py`)  
+**A foundational demo to test webcam-based finger-tracking.**
 
-### `main.py` – Hand Gesture Control (basic)  
-- Detects fingers using `cvzone`  
-- Sends inverted binary (open/closed) finger states to Arduino  
-- Format: `$10101`
+### **What It Does**
+
+- Uses **OpenCV** & **CVZone** to find your hand and detect if each finger is up/down in real time
+- Inverts the finger-up list (`1` becomes `0` = *open*, `0` becomes `1` = *closed*)
+- Sends the resulting 5-digit binary (e.g., `$10100`) over serial to Arduino
+- If the Arduino port disconnects, it auto-retries connection
+
+### **How the Code Works (Step by Step)**
+
+1. **Serial Connection Functions:**
+   - `find_arduino_port()`: Searches all COM ports for an Arduino
+   - `connect_serial()`: Tries to connect, auto-retries on error
+   - `send_data()`: Packages the finger data, sends over USB to Arduino
+
+2. **Hand Tracking Loop:**
+   - Initializes webcam and CVZone detector
+   - On each frame:
+     - Captures landmarks and finger states
+     - If state changes, inverts it, prints, and sends via serial
+     - Handles big disruptions with auto-disconnect/reconnect logic
+
+3. **Termination:**
+   - User can exit by pressing `'q'`, which releases camera and closes windows
+
+### **Typical Usage Flow**
+1. Start Arduino code (`ROBOTICARM.ino`)
+2. Run `python main.py` in PyCharm or terminal
+3. Make hand gestures in front of webcam; each change updates Arduino-controlled fingers
 
 ---
-### `main2.py` – Full GUI (all 3 modes)
 
-#### 🧭 Modes:
+## 🖥 Python GUI (`main2.py`) – All Modes!
+
+A full-featured Tkinter GUI to select between:
 
 1. **Hand Detection Mode**  
-   - Webcam detects fingers and sends data via Serial.
+   - Webcam tracks hand, deduces 5-finger states  
+   - Real-time servo actuation
 
-2. **Offline Voice Mode**  
-   - VOSK listens for: one, two, three, four, five  
-   - Maps each to pre-defined finger bit patterns
+2. **Voice Mode**  
+   - Listens for the words: one, two, three, four, five  
+   - Maps each voice number to a finger pattern
 
-3. **Rock-Paper-Scissors Mode (RPS)**  
-   - Voice detects: “rock”, “paper”, “scissors”  
-   - Maps to:
-     - Rock → `[1,1,1,1,1]`
-     - Paper → `[0,0,0,0,0]`
-     - Scissors → `[1,0,0,1,1]`
+3. **Rock-Paper-Scissors**  
+   - Listens for: "rock", "paper", "scissors"  
+   - Matches:
+     - Rock → `[1, 1, 1, 1, 1]`
+     - Paper → `[0, 0, 0, 0, 0]`
+     - Scissors → `[1, 0, 0, 1, 1]`
 
----
+### **Sample Patterns**
 
-### ✅ Run the Program
-
-python main2.py
-
-### 🗂️ Sample Finger Patterns
-
-| Action     | Pattern            |
-|------------|--------------------|
-| All Open   | `[0, 0, 0, 0, 0]`  |
-| All Closed | `[1, 1, 1, 1, 1]`  |
-| "Two"      | `[1, 0, 0, 1, 1]`  |
-| "Rock"     | `[1, 1, 1, 1, 1]`  |
-| "Paper"    | `[0, 0, 0, 0, 0]`  |
-| "Scissors" | `[1, 0, 0, 1, 1]`  |
-
-### 🎤 Voice Input Mappings
-
-**Number Mode:**
-
-| Command | Pattern             |
-|---------|---------------------|
-| One     | `[1, 0, 1, 1, 1]`   |
-| Two     | `[1, 0, 0, 1, 1]`   |
-| Three   | `[1, 1, 0, 0, 0]`   |
-| Four    | `[1, 0, 0, 0, 0]`   |
-| Five    | `[0, 0, 0, 0, 0]`   |
-
-**RPS Mode:**
-
-| Command     | Pattern             |
-|-------------|---------------------|
-| Rock        | `[1, 1, 1, 1, 1]`   |
-| Paper       | `[0, 0, 0, 0, 0]`   |
-| Scissors    | `[1, 0, 0, 1, 1]`   |
+| Action/Command | Pattern            |
+|----------------|--------------------|
+| All Open       | `[0, 0, 0, 0, 0]`  |
+| All Closed     | `[1, 1, 1, 1, 1]`  |
+| "Two"          | `[1, 0, 0, 1, 1]`  |
+| "Rock"         | `[1, 1, 1, 1, 1]`  |
+| "Paper"        | `[0, 0, 0, 0, 0]`  |
+| "Scissors"     | `[1, 0, 0, 1, 1]`  |
 
 ---
 
-## 🔌 Serial Communication
+## 🔌 Serial Data Format
 
-All Python code sends a 5-bit binary string (e.g., `$10110`) via USB serial to Arduino Uno. The string is parsed and each digit controls one servo corresponding to:
-[Thumb, Index, Middle, Ring, Pinky]
+- Python sends: `$ABCDE`  
+  Where A-E are `[Thumb, Index, Middle, Ring, Pinky]`
+- `1` = finger closed (servo 0°), `0` = open (servo 180°)
+- Arduino reads and actuates each finger accordingly
 
+---
 
-1 = finger closed → servo at 0°  
-0 = finger open → servo at 180°
+## ⚙️ Running & Usage
+
+1. **Upload** the Arduino code via Arduino IDE
+2. **Run** `main2.py` in PyCharm (or other terminal)
+3. **Switch modes** in the GUI (`Hand Detection`, `Voice Recognition`, `Rock Paper Scissors`)
+4. **Interact:** Show gestures, speak commands, or play RPS—servo fingers respond in real time
 
 ---
 
 ## 🛠️ Troubleshooting
 
-- ❌ **Not detecting Arduino?**
-  - Check `PORT = "comX"` in `main2.py` matches your system’s COM port.
-- 🎥 **Webcam not working?**
-  - Check OpenCV camera index (`cv2.VideoCapture(0)`) or drivers.
-- 🔇 **Microphone not recognized?**
-  - Check permissions and mic availability with `sounddevice`.
+| Symptom                    | Solution                                |
+|----------------------------|-----------------------------------------|
+| Arduino not detected       | Update `PORT` in code, check wiring     |
+| Camera error               | Try changing webcam index to `1` or `2` |
+| Mic not working            | Check permissions, device availability  |
+| Servos not moving          | Use external 5V power, check wiring     |
+| Vosk error                 | Ensure model folder path is correct     |
 
 ---
 
 ## 👨‍🏫 Special Thanks
 
-Project developed under the mentorship and guidance of **Abhiram**.
+Project completed with the guidance and mentorship of **Abhiram**.
 
 ---
 
 ## 📝 License
 
-This project is licensed under the **MIT License**.  
-Feel free to fork, contribute, or use this for your own developments in assistive technology or robotics.
+Licensed under the **MIT License**.  
+Re-use, fork, or expand for your own assistive robotics—and please share your work back!
 
 ---
 
 ## 🤝 Contributions
 
-Pull requests, feedback, and ideas are always welcome!  
-If you build upon this project or adapt it for a different purpose, feel free to share your version and tag me.
+- Suggestions, issues, and pull requests always welcome!
+- If you create a new mode, fix a bug, or adapt for another prosthetic—let me know and tag the repo.
 
+---
 
-🎯 *Built with PyCharm, powered by OpenCV, Vosk & Arduino.*
-
-
-
+🎯 *Built with PyCharm. Powered by OpenCV, CVZone, Vosk & Arduino.*
