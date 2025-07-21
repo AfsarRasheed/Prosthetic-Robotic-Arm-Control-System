@@ -2,7 +2,7 @@
 
 A multi-modal prosthetic hand powered by gesture recognition, offline voice commands, and Arduino-based real-time servo control. This project aims to build an assistive robotic arm controlled intuitively using hand tracking via webcam or voice instructions—no internet required.
 
-**Developed under the guidance of Abhiram.**
+
 
 ---
 
