@@ -15,7 +15,7 @@ import threading  # To run multiple detection modes in parallel
 
 # === Serial Connection Functions ===
 
-# Function to search for Arduino COM port
+# Function to search for Arduino COM port.
 def find_arduino_port(known_port=None):
     ports = list(serial.tools.list_ports.comports())  # List all serial ports
     for p in ports:
