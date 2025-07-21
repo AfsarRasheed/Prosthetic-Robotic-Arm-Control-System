@@ -1,27 +1,31 @@
-import cv2
-from cvzone.HandTrackingModule import HandDetector
-import serial
-import serial.tools.list_ports
-import time
-import queue
-import sounddevice as sd
-from vosk import Model, KaldiRecognizer
-import json
-import os
-import tkinter as tk
-from tkinter import ttk
-import threading
+# === Library Imports ===
+import cv2  # Computer vision — for webcam and image display
+from cvzone.HandTrackingModule import HandDetector  # Hand tracking from CVZone
+import serial  # Serial communication with Arduino
+import serial.tools.list_ports  # Utility to get all COM ports
+import time  # Time delays and timestamp control
+import queue  # Queue for sharing voice data across threads
+import sounddevice as sd  # Real-time microphone input
+from vosk import Model, KaldiRecognizer  # Offline speech recognition
+import json  # Handling speech recognition results
+import os  # File and directory path handling
+import tkinter as tk  # GUI framework
+from tkinter import ttk  # Advanced tkinter widgets
+import threading  # To run multiple detection modes in parallel
 
-# === Serial connection helpers ===
+# === Serial Connection Functions ===
+
+# Function to search for Arduino COM port
 def find_arduino_port(known_port=None):
-    ports = list(serial.tools.list_ports.comports())
+    ports = list(serial.tools.list_ports.comports())  # List all serial ports
     for p in ports:
         if known_port and known_port.lower() in p.device.lower():
-            return p.device
+            return p.device  # Return matched known port
         if "arduino" in p.description.lower():
-            return p.device
-    return None
+            return p.device  # Auto-detect Arduino based on description
+    return None  # Not found
 
+# Try connecting to serial (with retries)
 def connect_serial(port, baudrate, timeout=1, retries=9999, wait=2):
     for attempt in range(retries):
         try:
@@ -32,34 +36,39 @@ def connect_serial(port, baudrate, timeout=1, retries=9999, wait=2):
         except Exception as e:
             print(f"Connection failed: {e}. Retrying in {wait} seconds...")
             time.sleep(wait)
-            port = find_arduino_port(port) or port
+            port = find_arduino_port(port) or port  # Try refreshing the port
     raise Exception("Could not connect to Arduino after multiple attempts.")
 
+# Serial send function (finger pattern)
 def send_data(ser, data):
     try:
-        msg = "$" + "".join(str(int(x)) for x in data)
+        msg = "$" + "".join(str(int(x)) for x in data)  # Format: $10101
         ser.write(msg.encode())
     except Exception as e:
         raise e
 
-# === Offline voice recognition setup (Vosk) ===
+# === Vosk Voice Recognition Setup ===
+
+# Path to the downloaded Vosk model
 model_path = "vosk-model-small-en-us-0.15/vosk-model-small-en-us-0.15"
 if not os.path.exists(model_path):
     raise Exception("Vosk model not found. Please download and extract to: " + model_path)
 
-model = Model(model_path)
-recognizer = KaldiRecognizer(model, 16000)
-q = queue.Queue()
+model = Model(model_path)  # Load the model
+recognizer = KaldiRecognizer(model, 16000)  # Init recognizer with 16000Hz audio
+q = queue.Queue()  # Queue for microphone audio
 
+# Callback for microphone input
 def callback(indata, frames, time_info, status):
     if status:
         print("Mic status:", status)
-    q.put(bytes(indata))
+    q.put(bytes(indata))  # Push audio bytes to queue
 
+# Recognize number spoken using Vosk
 def recognize_number_vosk():
     number_words = {
         1: ['1', 'one', 'won', 'wan', 'on', 'first'],
-        2: ['2', 'two', 'to', 'too', 'tu', 'second', 'tow','do'],
+        2: ['2', 'two', 'to', 'too', 'tu', 'second', 'tow', 'do'],
         3: ['3', 'three', 'tree', 'free', 'third', 'thre'],
         4: ['4', 'four', 'for', 'fore', 'forth', 'fourth'],
         5: ['5', 'five', 'fife', 'fiv', 'fifth'],
@@ -80,15 +89,17 @@ def recognize_number_vosk():
                             for word in text.split():
                                 for num, words in number_words.items():
                                     if word.lower() in words:
-                                        return num
+                                        return num  # Return matched voice number
 
-# === GUI Application ===
+# === GUI Class ===
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Prosthetic Arm Control")
         self.geometry("400x200")
-        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.protocol("WM_DELETE_WINDOW", self.on_close)  # Capture window close event
+
+        # Create notebook tabs
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill='both', expand=True)
         self.tab1 = ttk.Frame(self.notebook)
@@ -97,16 +108,20 @@ class App(tk.Tk):
         self.notebook.add(self.tab1, text='Hand Detection')
         self.notebook.add(self.tab2, text='Voice Recognition')
         self.notebook.add(self.tab3, text='Rock Paper Scissors')
+
+        # Thread management
         self.running = True
         self.hand_thread = None
         self.voice_thread = None
         self.rps_thread = None
-        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
         self.active_tab = 0
-        self.start_hand_detection()
+
+        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)  # Tab switch callback
+        self.start_hand_detection()  # Default start with hand detection
 
     def on_tab_change(self, event):
         tab = self.notebook.index(self.notebook.select())
+        # Start / stop logic based on active tab
         if tab == 0 and self.active_tab != 0:
             self.stop_voice_recognition()
             self.stop_rps_recognition()
@@ -123,6 +138,7 @@ class App(tk.Tk):
             self.start_rps_recognition()
             self.active_tab = 2
 
+    # Thread wrappers
     def start_hand_detection(self):
         if self.hand_thread is None or not self.hand_thread.is_alive():
             self.hand_thread = threading.Thread(target=hand_detection_loop, daemon=True)
@@ -157,11 +173,14 @@ class App(tk.Tk):
         self.stop_rps_recognition()
         self.destroy()
 
-# === Hand tracking setup ===
-cap = cv2.VideoCapture(0)
-detector = HandDetector(maxHands=1, detectionCon=0.8, minTrackCon=0.5)
-PORT = "com5"  # Change this if needed
-BAUD = 9600
+# === Initialize Hand Tracker ===
+cap = cv2.VideoCapture(0)  # Open webcam
+detector = HandDetector(maxHands=1, detectionCon=0.8, minTrackCon=0.5)  # Detect 1 hand max
+
+PORT = "com5"  # Your Arduino COM port
+BAUD = 9600  # Must match Arduino sketch
+
+# Try connecting to Arduino
 ser = None
 while ser is None:
     port = find_arduino_port(PORT)
@@ -174,8 +193,11 @@ while ser is None:
     else:
         print("Arduino not found. Retrying...")
         time.sleep(2)
+
+# Track previous finger state
 prev_fingers = [0, 0, 0, 0, 0]
 
+# === Hand Detection Thread Function ===
 hand_detection_active = False
 def hand_detection_loop():
     global hand_detection_active
@@ -209,6 +231,7 @@ def hand_detection_loop():
             break
     cv2.destroyAllWindows()
 
+# === Voice Recognition Thread ===
 voice_recognition_active = False
 def voice_recognition_loop():
     global voice_recognition_active
@@ -216,41 +239,37 @@ def voice_recognition_loop():
     while voice_recognition_active:
         number = recognize_number_vosk()
         if number:
-            # Finger pattern: [thumb, index, middle, ring, pinky]
-            if number == 1:
-                voice_fingers = [1, 0, 1, 1, 1]
-            elif number == 2:
-                voice_fingers = [1, 0, 0, 1, 1]
-            elif number == 3:
-                voice_fingers = [1, 1, 0, 0, 0]
-            elif number == 4:
-                voice_fingers = [1, 0, 0, 0, 0]
-            elif number == 5:
-                voice_fingers = [0, 0, 0, 0, 0]
-            else:
-                continue
-            print(f"🎯 Activating finger pattern {voice_fingers} for number {number} via voice")
-            try:
-                send_data(ser, voice_fingers)
-                prev_fingers[:] = voice_fingers
-            except Exception as e:
-                print(f"Serial error: {e}. Reconnecting...")
+            voice_fingers = {
+                1: [1, 0, 1, 1, 1],
+                2: [1, 0, 0, 1, 1],
+                3: [1, 1, 0, 0, 0],
+                4: [1, 0, 0, 0, 0],
+                5: [0, 0, 0, 0, 0],
+            }.get(number, None)
+            if voice_fingers:
+                print(f"🎯 Activating finger pattern {voice_fingers} for number {number} via voice")
                 try:
-                    if ser is not None:
-                        ser.close()
-                except:
-                    pass
-                reconnect_serial()
+                    send_data(ser, voice_fingers)
+                    prev_fingers[:] = voice_fingers
+                except Exception as e:
+                    print(f"Serial error: {e}. Reconnecting...")
+                    try:
+                        if ser:
+                            ser.close()
+                    except:
+                        pass
+                    reconnect_serial()
 
+# === Rock-Paper-Scissors Recognition ===
 def recognize_rps_vosk():
     rps_words = {
-        'rock': ['rock', 'rok', 'roc', 'lock', 'ruck', 'rack','brock'],
-        'paper': ['paper', 'papor', 'payper', 'piper', 'papa', 'peper','people'],
-        'scissors': ['scissors', 'scisor', 'scizzors', 'scissor', 'scissers', 'scizzers', 'sizzors', 'scisors', 'sciszer', 'sciser','caesar','season','see them'],
+        'rock': ['rock', 'rok', 'roc', 'lock', 'ruck'],
+        'paper': ['paper', 'papor', 'papa', 'peper'],
+        'scissors': ['scissors', 'scissor', 'scizzors', 'season'],
     }
     while True:
-        with sd.RawInputStream(samplerate=16000, blocksize=8000, dtype='int16',
-                               channels=1, callback=callback):
+        with sd.RawInputStream(samplerate=16000, blocksize=8000,
+                               dtype='int16', channels=1, callback=callback):
             print("🎤 [Vosk] Listening offline for rock, paper, or scissors...")
             rec = KaldiRecognizer(model, 16000)
             while True:
@@ -262,8 +281,8 @@ def recognize_rps_vosk():
                         if text:
                             print(f"✅ [Vosk] Heard: '{text}'")
                             for word in text.split():
-                                for move, words in rps_words.items():
-                                    if word.lower() in words:
+                                for move, keywords in rps_words.items():
+                                    if word.lower() in keywords:
                                         return move
 
 rps_recognition_active = False
@@ -272,28 +291,25 @@ def rps_recognition_loop():
     rps_recognition_active = True
     while rps_recognition_active:
         move = recognize_rps_vosk()
-        if move:
-            if move == 'rock':
-                rps_fingers = [1, 1, 1, 1, 1]
-            elif move == 'paper':
-                rps_fingers = [0, 0, 0, 0, 0]
-            elif move == 'scissors':
-                rps_fingers = [1, 0, 0, 1, 1]
-            else:
-                continue
-            print(f"🎯 Activating RPS pattern {rps_fingers} for move '{move}' via voice")
+        rps_fingers = {
+            'rock': [1, 1, 1, 1, 1],
+            'paper': [0, 0, 0, 0, 0],
+            'scissors': [1, 0, 0, 1, 1]
+        }.get(move, None)
+        if rps_fingers:
+            print(f"🎯 Activating pattern for '{move}': {rps_fingers}")
             try:
                 send_data(ser, rps_fingers)
                 prev_fingers[:] = rps_fingers
             except Exception as e:
                 print(f"Serial error: {e}. Reconnecting...")
                 try:
-                    if ser is not None:
-                        ser.close()
+                    if ser: ser.close()
                 except:
                     pass
                 reconnect_serial()
 
+# === Reconnect Serial ===
 def reconnect_serial():
     global ser
     ser = None
@@ -309,7 +325,7 @@ def reconnect_serial():
             print("Arduino not found. Retrying...")
             time.sleep(2)
 
+# === App Entry Point ===
 if __name__ == "__main__":
     app = App()
-    app.mainloop()
-    
+    app.mainloop()  # Launch the GUI
